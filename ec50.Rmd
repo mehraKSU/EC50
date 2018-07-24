@@ -1,0 +1,53 @@
+---
+title: "Absolute EC 50 calculation"
+author: "Lucky Mehra"
+date: "July 24, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+# install and load packages
+if (!require ("pacman")) install.packages("pacman")
+library(pacman)
+p_load(tidyverse, drc, readxl, openxlsx)
+
+# read data into r
+a <- read_excel("data.xlsx")
+a
+
+# write a function to get absolute EC50
+f.get_ec50 <- function(df){
+  # fit a 3-parameter log-logistic model to the relative growth data, lower asymptote is kept fixed at 0
+  ec50.ll3 <- drm(df$relY ~ df$dose, 
+                  fct = LL.3(fixed = c(NA, NA, NA), names = c("Slope", "Upper", "EC50")),
+                  na.action = na.omit)
+  
+  # put absolute EC50, its standard error, and confidence intervals into a data frame
+  ec50.abs <- data.frame(ED(ec50.ll3, respLev = c(50), type = "absolute", interval = "delta"), 
+                         stringsAsFactors = FALSE)
+  return(ec50.abs)
+}
+```
+
+```{r, results = 'hide', warning = FALSE}
+# use dplyr package to get ec50s in a data.frame by different factors
+result <- a %>% 
+  group_by(Fungicide, ID, Exp_rep) %>%  
+  do(f.get_ec50(.))
+
+# take an average of ec50 from Exp_rep 1 and 2
+result1 <- result %>% 
+  group_by(Fungicide, ID) %>% 
+  summarise(EC50_abs = mean(Estimate, na.rm = TRUE))
+```
+
+```{r}
+result1
+# write to results to an excel file
+write.xlsx(result1, "ec50_abs.xlsx")
+```
